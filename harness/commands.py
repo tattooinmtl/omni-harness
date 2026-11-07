@@ -270,7 +270,13 @@ def ctx_models_dir() -> str:
     model = os.environ.get("OMNI_MODEL_DIR")
     if model:
         return model
-    return r"C:\models"
+    import json  # noqa: PLC0415
+    root = Path(__file__).resolve().parent.parent
+    try:
+        configured = json.loads((root / "config.json").read_text(encoding="utf-8")).get("models_dir")
+    except (OSError, ValueError, AttributeError):
+        configured = None
+    return configured or str(root / "models")
 
 
 @command("/model", "show the model, list the .gguf files, or switch with /model <name>")

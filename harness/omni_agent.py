@@ -60,20 +60,13 @@ LAST_PROJECT_FILE = DEFAULT_ROOT / "last-project.txt"
 SESSION_DIR = DEFAULT_ROOT / "logs" / "sessions"
 CONFIG_FILE = DEFAULT_ROOT / "config.json"
 
-# Where the model and the engine live when the app is installed somewhere
-# else than C:\models. The installer writes config.json next to the code,
-# and these two functions fall back to a sensible search.
+# The app only looks inside its own folder (models\ and llama\). Anything
+# else must be pointed to: OMNI_MODEL / OMNI_LLAMA_DIR, --llama-dir, or
+# "model" / "llama_dir" in config.json.
 MODEL_GLOB = "NousResearch_Arete-27B-Q4_K_M.gguf"
 MODEL_FALLBACK_GLOB = "*Arete-27B*.gguf"
-KNOWN_MODEL_DIRS = (Path(r"C:\models"),)
-# The llama.cpp builds this machine has, fastest first. b11873 (Clang) is
-# about 3-10% faster on this CPU than the MSVC b12189 source build, and both
-# run the qwen35 architecture.
-KNOWN_LLAMA_DIRS = (
-    Path(r"C:\models\llama.cpp"),
-    Path(r"C:\Llama-master\llama.cpp\latest_bin\bin\Release"),
-    Path(r"C:\models\spark26\llama\llama-b11873-cpu"),
-)
+KNOWN_MODEL_DIRS = (DEFAULT_ROOT / "models",)
+KNOWN_LLAMA_DIRS = (DEFAULT_ROOT / "llama",)
 
 
 def load_config() -> dict:
@@ -93,7 +86,7 @@ def find_model() -> Path:
     config = load_config()
     if config.get("model") and Path(config["model"]).is_file():
         return Path(config["model"])
-    for folder in (DEFAULT_ROOT / "models", *KNOWN_MODEL_DIRS):
+    for folder in KNOWN_MODEL_DIRS:
         candidate = folder / MODEL_GLOB
         if candidate.is_file():
             return candidate
@@ -795,7 +788,7 @@ def split_thinking(text: str) -> tuple:
     Two shapes have to be handled. When the engine returns a full reply the
     block is self-contained: "<think>...</think>answer". When the prompt
     already opened the block (the generation prompt ends with "<think>", as
-    Spark's template does), the completion only carries the closing tag:
+    some templates do), the completion only carries the closing tag:
     "reasoning...</think>answer". Splitting on the closing tag alone would
     leave a stray tag in the answer and corrupt the next history turn.
     """
