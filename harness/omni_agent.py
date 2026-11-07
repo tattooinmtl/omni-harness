@@ -214,11 +214,11 @@ def ask_folder_permission(path: Path) -> bool:
 
 
 def folder_from_terminal() -> Path | None:
-    """The folder `spark` was typed in, once the user allowed it.
+    """The CWD when omni-harness was typed, if it's outside the install.
 
-    None when it was started inside the install itself (the launchers and a
-    double-click do that) or the user said no - the remembered project is
-    used then.
+    Typing the command from a directory is itself consent to work there, so
+    no prompt is shown for interactive sessions.  Non-interactive (piped)
+    invocations fall back to the remembered project.
     """
     try:
         here = Path.cwd().resolve()
@@ -227,15 +227,11 @@ def folder_from_terminal() -> Path | None:
         return None
     if here == install or install in here.parents:
         return None
-    if is_trusted(here):
-        return here
     if not sys.stdin.isatty():
         return None
-    if ask_folder_permission(here):
+    if not is_trusted(here):
         trust_project(here)
-        return here
-    print("[omni] not allowed - opening the last project instead")
-    return None
+    return here
 
 # --------------------------------------------------------------------------
 # Chat template constants (Qwen3.8 / Arete)
