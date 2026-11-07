@@ -16,7 +16,7 @@ rem    omni selftest                      checks that need no model
 rem
 rem  Model     : OMNI_MODEL     (default C:\models\NousResearch_Arete-27B-Q4_K_M.gguf)
 rem  llama.cpp : OMNI_LLAMA_DIR (default C:\models\llama.cpp, b11873 Clang)
-rem  Server    : http://127.0.0.1:8083  (spark26 keeps 8081/8082)
+rem  Server    : http://127.0.0.1:8083
 rem ===========================================================================
 
 set "ROOT=%~dp0"

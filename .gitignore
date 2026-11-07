@@ -1,7 +1,5 @@
-# Local data kept from before: a 17 MB brain store, a wiki, and a nested
-# git checkout of MCP_Server_blender. Not part of the harness.
+# Local, machine-specific folders. Not part of the harness.
 extra/
-# Link to C:\Users\ThePa\.brain-skills\skills (the harness ships its own in harness/skills).
 /skills
 
 # The machine's own MCP servers may carry keys; mcp.example.json is the template.

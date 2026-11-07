@@ -1,8 +1,7 @@
 # Omni harness: a terminal agent for Arete-27B
 
-A local terminal agent that runs **NousResearch Arete-27B** (`C:\models\NousResearch_Arete-27B-Q4_K_M.gguf`)
-on llama.cpp. It has the same setup as Spark Code 2.6 (`C:\models\spark26`), with the parts that
-depend on the model rebuilt for Arete.
+A local terminal agent that runs **NousResearch Arete-27B** (GGUF, e.g. Q4_K_M) on llama.cpp,
+with the parts that depend on the model built for Arete.
 
 ```bat
 omni                      interactive session (last project, or the folder you are in)
@@ -31,14 +30,14 @@ The changes are in its values and framing. Its agentic skills were kept (Termina
 
 Tools: `read_file`, `list_dir`, `grep`, `write_file`, `edit_file`, `run_command` (cmd.exe), `git_status`,
 `git_diff`, `git_log`, `read_skill`, `finish`. MCP is opt-in (`--mcp`, reads `mcp.json`). Web tools are
-opt-in (`--web`, needs `webtools.py` copied from spark26).
+opt-in (`--web`, needs a separate `webtools.py` module).
 
-## Speed on this PC (Ryzen 7 5700U, CPU only)
+## Reference speed (Ryzen 7 5700U, CPU only)
 
-| build | prompt | generation |
+| llama.cpp build | prompt | generation |
 | --- | ---: | ---: |
-| b11873 Clang (`C:\models\llama.cpp`, default) | 10.8 tok/s | 2.04 tok/s |
-| b12189 MSVC (`C:\Llama-master\...\Release`) | 9.5 tok/s | 2.01 tok/s |
+| b11873 Clang | 10.8 tok/s | 2.04 tok/s |
+| b12189 MSVC | 9.5 tok/s | 2.01 tok/s |
 
 The first prompt is about 2,000 tokens, roughly 3–4 minutes. After that, each turn only pays for its
 new tokens. Keep answers short.
@@ -60,15 +59,13 @@ V.0 . 1 . 0
 ```
 .omni-harness\
 ├── omni.cmd                launcher
-├── mcp.json                MCP servers (blender), used with --mcp
-├── extra\                  kept from before (MCP_Server_blender, brain, wiki)
-├── skills -> .brain-skills  kept; not loaded (144 skills is too much prompt for this model)
+├── mcp.example.json        MCP server template; copy to mcp.json, used with --mcp
 ├── harness\
 │   ├── version.py          VERSION = "0.1.0" (the only place it is set)
 │   ├── omni_agent.py       the agent: Arete template, Qwen tool parser, engine, loop
 │   ├── selftest.py         template parity + parser checks
 │   ├── commands.py         slash commands (/reasoning off|low|medium|xhigh, /settings, ...)
-│   ├── settings.py  tui.py  winproc.py  mcpclient.py  gguf_info.py   (from spark26)
-│   └── skills\             the small spark26 skills: read-code, edit-code, verify, debug, plan, code-review
+│   ├── settings.py  tui.py  winproc.py  mcpclient.py  gguf_info.py
+│   └── skills\             bundled skills: read-code, edit-code, verify, debug, plan, code-review
 └── logs\                   sessions, server log, KV-cache slots
 ```

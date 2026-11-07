@@ -49,9 +49,9 @@ for _http_name in ("streamable_http_client", "streamablehttp_client"):
 
 # --- configuration -----------------------------------------------------------
 CONFIG_CANDIDATES: tuple[Path, ...] = (
-    Path(r"C:\Users\ThePa\.minimax\mcp.json"),
-    Path(r"C:\Users\ThePa\.mavis\mcp.json"),
-    Path(r"C:\Users\ThePa\.omni-harness\mcp.json"),
+    Path.home() / ".minimax" / "mcp.json",
+    Path.home() / ".mavis" / "mcp.json",
+    Path.home() / ".omni-harness" / "mcp.json",
 )
 
 DEFAULT_CONNECT_TIMEOUT = 20.0

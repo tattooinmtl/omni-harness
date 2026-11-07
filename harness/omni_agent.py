@@ -2358,7 +2358,7 @@ def build_parser():
                         help="always start an interactive session, even when stdin is a pipe")
     parser.add_argument("--render", action="store_true", help="print the rendered prompt and exit")
     parser.add_argument("--web", action="store_true",
-                        help="also load web_search/web_fetch (needs webtools.py from spark26)")
+                        help="also load web_search/web_fetch (needs a separate webtools.py module)")
     parser.add_argument("--mcp", action="store_true", help="load the MCP servers from mcp.json")
     parser.add_argument("--mcp-config", default=str(DEFAULT_ROOT / "mcp.json"),
                         help="path to an MCP config file")
