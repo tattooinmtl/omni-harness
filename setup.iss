@@ -125,11 +125,9 @@ begin
   PythonExe := FindPython;
   if PythonExe = '' then begin
     if MsgBox(
-      'Python 3.10 or later is required but was not found on your PATH.' + #13#10 +
-      #13#10 +
+      'Python 3.10 or later is required but was not found on your PATH.' + #13#10 + #13#10 +
       'Please install Python from  https://python.org  and make sure' + #13#10 +
-      '"Add Python to PATH" is checked during the Python installer.' + #13#10 +
-      #13#10 +
+      '"Add Python to PATH" is checked during the Python installer.' + #13#10 + #13#10 +
       'Continue anyway (installation will likely fail)?',
       mbConfirmation, MB_YESNO) = IDNO then begin
       Result := False;
