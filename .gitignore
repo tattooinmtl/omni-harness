@@ -24,6 +24,12 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+dist/
+build/
+*.egg-info/
+
+# Installed addon copy (source lives in providers-addon/)
+harness/providers_addon/
 
 # Editors and OS.
 .vscode/

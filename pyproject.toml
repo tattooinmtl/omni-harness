@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "omni-harness"
+version = "0.1.0"
+description = "Terminal agent for NousResearch Arete-27B on llama.cpp"
+requires-python = ">=3.10"
+
+[project.scripts]
+omni-harness = "harness.omni_agent:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["harness*"]
+
+[tool.setuptools.package-data]
+harness = ["skills/**/*"]
