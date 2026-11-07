@@ -16,7 +16,7 @@ AppPublisher={#MyAppPublish}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={userhome}\.omni-harness
+DefaultDirName={%USERPROFILE}\.omni-harness
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputBaseFilename=omni-harness-setup
@@ -64,7 +64,7 @@ Source: "providers-addon\*"; DestDir: "{app}\providers-addon"; \
 ; ---------------------------------------------------------------------------
 [Icons]
 Name: "{group}\Run Omni Harness";    Filename: "{sys}\cmd.exe"; \
-  Parameters: "/K ""omni-harness"""; WorkingDir: "{userhome}"; \
+  Parameters: "/K ""omni-harness"""; WorkingDir: "{%USERPROFILE}"; \
   Comment: "Open a terminal and start Omni Harness"
 Name: "{group}\Uninstall Omni Harness"; Filename: "{uninstallexe}"
 
