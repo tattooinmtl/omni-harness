@@ -1,4 +1,4 @@
-; Shared by setup.iss and providers-setup.iss — included inside [Code].
+// Shared by setup.iss and providers-setup.iss — included inside [Code].
 
 var
   PythonExe: String;
