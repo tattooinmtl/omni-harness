@@ -132,6 +132,10 @@ def _cmd_addkey(ctx) -> str:
 
     print(theme.paint(f"Available models for {provider['label']}", "bold"))
     model_id = _pick_model_interactively(provider_name, models, theme)
+    if model_id and hasattr(ctx.agent, "use_cloud"):
+        message = ctx.agent.use_cloud(provider_name, model_id)
+        ctx.engine = ctx.agent.engine
+        return theme.paint(f"Key saved. {message}", "success")
     if model_id:
         set_active_model(provider_name, model_id)
         return theme.paint(
@@ -252,13 +256,14 @@ def _cmd_usemodel(ctx) -> str:
             f"no model {selector!r}; use a number 1-{len(models)} or the full model id", "warning"
         )
 
+    if hasattr(ctx.agent, "use_cloud"):
+        message = ctx.agent.use_cloud(provider_name, model_id)
+        ctx.engine = ctx.agent.engine
+        return theme.paint(message, "success")
     set_active_model(provider_name, model_id)
-    # Invalidate the engine so the agent reloads it on the next turn
-    if hasattr(ctx.agent, "invalidate_engine"):
-        ctx.agent.invalidate_engine()
     return theme.paint(
         f"Active model for {provider['label']}: {model_id}\n"
-        "The next message will use the cloud provider.", "success"
+        "Restart the app to use it.", "success"
     )
 
 
@@ -269,15 +274,18 @@ def _cmd_usemodel(ctx) -> str:
 def _cmd_uselocal(ctx) -> str:
     from providers_addon.keystore import _load, _providers, _save  # noqa: PLC0415
     theme = ctx.theme
+    if hasattr(ctx.agent, "start_local"):
+        print(theme.paint("starting llama.cpp...", "dim"))
+        message = ctx.agent.start_local()
+        ctx.engine = ctx.agent.engine
+        return theme.paint(message, "success")
     # Clear active_model for all providers so active_provider() returns None
     data = _load()
     for entry in _providers(data).values():
         if isinstance(entry, dict):
             entry.pop("active_model", None)
     _save(data)
-    if hasattr(ctx.agent, "invalidate_engine"):
-        ctx.agent.invalidate_engine()
-    return theme.paint("Switched back to the local llama.cpp model.", "success")
+    return theme.paint("Restart the app to use the local llama.cpp model.", "success")
 
 
 # ---------------------------------------------------------------------------

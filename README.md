@@ -14,6 +14,20 @@ omni --task "..."         one task, then exit
 omni selftest             template parity and parser checks, no model needed
 ```
 
+## Models
+
+Put `.gguf` files in the app's `models\` folder, or add another folder from inside the app:
+
+```
+/addmodelpath D:\AI\models    add a folder of models
+/models                       list every model, local and cloud, numbered
+/model 2                      load model #2 from that list
+/start llama                  start local llama.cpp (or switch back from a cloud model)
+/restart llama                restart local llama.cpp
+```
+
+`/help` lists every command with one example each.
+
 ## What Arete is, and why the harness looks like this
 
 Arete-27B is **Qwen3.8-27B** (`qwen35`, hybrid gated delta-net + full attention). Nous Research

@@ -38,10 +38,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "providers"; Description: "Also install the BYOK cloud providers addon (NVIDIA NIM, MiniMax)"; \
   GroupDescription: "Addons:"; Flags: unchecked
 
+[Dirs]
+; Kept on uninstall: it holds the user's model files.
+Name: "{app}\models"; Flags: uninsneveruninstall
+
 [Files]
 Source: "harness\*"; DestDir: "{app}\harness"; Flags: ignoreversion recursesubdirs createallsubdirs; \
   Excludes: "__pycache__,*.pyc,*.pyo,providers_addon"
 Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "models\README.md"; DestDir: "{app}\models"; Flags: onlyifdoesntexist
 Source: "dist\omni-harness-providers-setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: providers
 
 [Icons]
@@ -87,6 +92,10 @@ begin
   WizardForm.StatusLabel.Caption := 'Downloading the Chromium browser used by the browser tools...';
   Exec(PythonExe, '-m playwright install chromium', ExpandConstant('{app}'),
        SW_SHOW, ewWaitUntilTerminated, RC);
+
+  WizardForm.StatusLabel.Caption := 'Carrying your existing settings and keys over to the new config...';
+  Exec(PythonExe, '"' + ExpandConstant('{app}') + '\harness\migrate_config.py"',
+       ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, RC);
 
   if WizardIsTaskSelected('providers') then begin
     WizardForm.StatusLabel.Caption := 'Installing the BYOK cloud providers addon...';

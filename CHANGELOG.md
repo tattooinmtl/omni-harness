@@ -1,5 +1,27 @@
 # Changelog
 
+## Models and engine commands (2026-11-07, later)
+
+- **`models\` folder.** The app ships an empty `models\` folder. Put `.gguf` files there, or add
+  other folders with `/addmodelpath <folder>` (saved in `config.json` as `model_paths`). If no model
+  is found at startup, the app asks for a folder and lets you pick a model by number.
+- **`/models`** lists every model, numbered: local `.gguf` files, plus cloud models when the providers
+  addon is installed and has a key. **`/model <#>`** loads one right away. The choice is remembered
+  for the next start.
+- **`/start llama`** and **`/restart llama`** start or restart local llama.cpp. They also switch back
+  from a cloud model, for example when you hit a provider's rate limit.
+- **`/reload`** re-reads `config.json`, the model folders, the skills and the project's `AGENTS.md`,
+  and keeps the conversation. **`/restart`** restarts the whole app and reopens the same conversation.
+- **`/help`** shows how to type every command, with one example each.
+- **Config migration.** `harness\migrate_config.py` upgrades an older `config.json` to version 2.
+  Paths, API keys, the chosen model and settings are kept, and the new keys are added. The old file
+  is saved as `config.json.bak`. The installer and the app both run it, and running it twice changes
+  nothing.
+- **Providers addon.** `/addkey`, `/usemodel` and `/uselocal` now switch the model immediately; no
+  restart needed. The addon no longer patches `/help`, which lists its commands itself.
+- **Known issue:** `/design-review` and `/resolve` don't work. They need a `review` module that was
+  never part of the repo.
+
 ## Notice: core changes on 2026-11-07
 
 All changes below were made in one Claude Code session. **The AI model changed partway through
