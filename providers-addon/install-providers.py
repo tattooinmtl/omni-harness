@@ -181,8 +181,9 @@ def install(harness: Path) -> int:
     if COMMANDS_SENTINEL in text:
         print("  [skip] already patched")
     else:
-        _apply_patch(cmds_py, COMMANDS_PATCH_1_OLD, COMMANDS_PATCH_1_NEW,
-                     "HELP_GROUPS Model section")
+        # The app's /help already lists the addon commands, so only the
+        # registration hook is needed. COMMANDS_PATCH_1 is still reverted on
+        # uninstall for installs made by older versions of this script.
         _apply_patch(cmds_py, COMMANDS_PATCH_2_OLD, COMMANDS_PATCH_2_NEW,
                      "command registration hook")
 

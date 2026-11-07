@@ -12,10 +12,11 @@ last-project.txt
 trusted-projects.json
 config.json
 
-# Models and llama.cpp builds live outside the repo.
+# Models and llama.cpp builds are never committed; models\ ships with its readme only.
 *.gguf
 llama/
-models/
+models/*
+!models/README.md
 
 # Python.
 __pycache__/

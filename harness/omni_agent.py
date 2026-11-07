@@ -50,6 +50,8 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import commands as slash_commands
+import migrate_config
+import modelpaths
 import settings as settings_store
 import tui
 import winproc
@@ -60,12 +62,12 @@ LAST_PROJECT_FILE = DEFAULT_ROOT / "last-project.txt"
 SESSION_DIR = DEFAULT_ROOT / "logs" / "sessions"
 CONFIG_FILE = DEFAULT_ROOT / "config.json"
 
-# The app only looks inside its own folder (models\ and llama\). Anything
-# else must be pointed to: OMNI_MODEL / OMNI_LLAMA_DIR, --llama-dir, or
-# "model" / "llama_dir" in config.json.
+# Models are searched in the app's models\ folder and the folders added with
+# /addmodelpath (config.json "model_paths"). llama.cpp is searched in llama\.
+# Anything else must be pointed to: OMNI_MODEL / OMNI_LLAMA_DIR, --llama-dir,
+# or "model" / "llama_dir" in config.json.
 MODEL_GLOB = "NousResearch_Arete-27B-Q4_K_M.gguf"
 MODEL_FALLBACK_GLOB = "*Arete-27B*.gguf"
-KNOWN_MODEL_DIRS = (DEFAULT_ROOT / "models",)
 KNOWN_LLAMA_DIRS = (DEFAULT_ROOT / "llama",)
 
 
@@ -78,6 +80,32 @@ def load_config() -> dict:
         return {}
 
 
+def _set_cloud_choice(provider: str | None, model: str | None) -> None:
+    """Record which cloud model the app starts with (None: start on local llama.cpp).
+
+    Same "providers" block the providers addon reads at startup.
+    """
+    data = modelpaths.load_config()
+    providers = data.get("providers")
+    if not isinstance(providers, dict):
+        if provider is None:
+            return
+        providers = data["providers"] = {}
+    changed = False
+    for entry in providers.values():
+        if isinstance(entry, dict) and entry.pop("active_model", None) is not None:
+            changed = True
+    if provider is not None:
+        providers.setdefault(provider, {})["active_model"] = model
+        changed = True
+    if changed:
+        modelpaths.save_config(data)
+
+
+def _clear_cloud_choice() -> None:
+    _set_cloud_choice(None, None)
+
+
 def find_model() -> Path:
     """The model to run, wherever this machine keeps it."""
     env = os.environ.get("OMNI_MODEL")
@@ -86,16 +114,17 @@ def find_model() -> Path:
     config = load_config()
     if config.get("model") and Path(config["model"]).is_file():
         return Path(config["model"])
-    for folder in KNOWN_MODEL_DIRS:
+    folders = modelpaths.model_dirs(config)
+    for folder in folders:
         candidate = folder / MODEL_GLOB
         if candidate.is_file():
             return candidate
-    for folder in KNOWN_MODEL_DIRS:
+    for folder in folders:
         if folder.is_dir():
             matches = sorted(folder.glob(MODEL_FALLBACK_GLOB))
             if matches:
                 return matches[0]
-    return KNOWN_MODEL_DIRS[0] / MODEL_GLOB
+    return modelpaths.MODELS_DIR / MODEL_GLOB
 
 
 def find_llama_dir() -> Path:
@@ -1722,6 +1751,12 @@ class OmniAgent:
         # Kept out of self.messages so the history and the cache stay as
         # they were.
         self.last_review = None
+        # Kept while a cloud model is in use, so /start llama can switch back.
+        self.local_engine = engine if isinstance(engine, (ServerEngine, CliEngine)) else None
+        self.explicit_settings: set = set()
+        self.restart_requested = False
+        # The numbered list /models printed last; /model <#> picks from it.
+        self.model_list: list = []
 
     # ------------------------------------------------------------------
     # conversation
@@ -1851,6 +1886,89 @@ class OmniAgent:
             except Exception:
                 return ""
         return ""
+
+    def using_local(self) -> bool:
+        return self.local_engine is not None and self.engine is self.local_engine
+
+    def _local(self):
+        if self.local_engine is None:
+            self.local_engine = ServerEngine(self.cfg) if self.cfg.engine == "server" else CliEngine(self.cfg)
+        return self.local_engine
+
+    def _stop_local(self) -> None:
+        local = self.local_engine
+        if local is None or getattr(local, "name", "") != "server" or not getattr(local, "running", False):
+            return
+        if len(self.messages) > 1 and hasattr(local, "save_slot"):
+            try:
+                local.save_slot(self.session_id)
+            except Exception:
+                pass
+        local.stop()
+
+    def start_local(self, restart: bool = False) -> str:
+        """Use local llama.cpp, starting it (or restarting it) now."""
+        local = self._local()
+        was_cloud = not self.using_local()
+        self.engine = local
+        _clear_cloud_choice()
+        if getattr(local, "name", "") != "server":
+            return "the cli engine starts llama.cpp for every turn; nothing to start"
+        if restart and getattr(local, "running", False):
+            local.stop()
+        if getattr(local, "running", False):
+            return "local llama.cpp is already running" + (" (switched from cloud)" if was_cloud else "")
+        local.start()
+        verb = "restarted" if restart else "started"
+        return f"local llama.cpp {verb} with {Path(self.cfg.model).name}" + (
+            " (switched from cloud)" if was_cloud else "")
+
+    def load_local_model(self, path: Path) -> str:
+        """Switch to a local .gguf and load it now."""
+        path = Path(path)
+        self.cfg.model = str(path)
+        try:
+            self.template = AreteTemplate(load_special_tokens(path))
+        except Exception:
+            pass
+        modelpaths.remember_model(path)
+        return self.start_local(restart=True)
+
+    def use_cloud(self, provider_name: str, model_id: str) -> str:
+        """Switch to a cloud model from the providers addon."""
+        try:
+            from providers_addon.catalog import get_provider  # noqa: PLC0415
+            from providers_addon.cloud_engine import CloudEngine  # noqa: PLC0415
+            from providers_addon.keystore import get_key  # noqa: PLC0415
+        except ImportError:
+            raise ValueError("cloud models need the providers addon (omni-harness-providers-setup.exe)")
+        provider = get_provider(provider_name)
+        key = get_key(provider_name)
+        if provider is None or not key:
+            raise ValueError(f"no API key for {provider_name}; add one with /addkey {provider_name} <key>")
+        _set_cloud_choice(provider_name, model_id)
+        self._stop_local()
+        self.engine = CloudEngine(provider_name=provider_name, base_url=provider["base_url"],
+                                  api_key=key, model=model_id, cfg=self.cfg)
+        note = " - local llama.cpp stopped (/start llama to switch back)" if self.local_engine else ""
+        return f"using {provider['label']} / {model_id}{note}"
+
+    def reload(self) -> dict:
+        """Re-read config.json, the skills and the project instructions; keep the conversation."""
+        settings_store.apply_saved(self.cfg, self, self.explicit_settings)
+        self.skills = load_skills(Path(self.cfg.skills))
+        base = build_tools(self.skills)
+        base_names = {t["function"]["name"] for t in base}
+        extras = [t for t in self.tools if t.get("function", {}).get("name") not in base_names]
+        self.tools[:] = base + extras
+        self.instructions = load_project_instructions(self.ws.root)
+        prompt = self.system_prompt()
+        changed = bool(self.messages) and self.messages[0].get("content") != prompt
+        if changed:
+            self.messages[0]["content"] = prompt
+        self.model_list = []
+        return {"skills": len(self.skills), "instructions": bool(self.instructions),
+                "prompt_changed": changed, "model_dirs": modelpaths.model_dirs()}
 
     def switch_workspace(self, path: Path):
         self.ws = Workspace(Path(path))
@@ -2355,11 +2473,80 @@ def build_parser():
     parser.add_argument("--mcp", action="store_true", help="load the MCP servers from mcp.json")
     parser.add_argument("--mcp-config", default=str(DEFAULT_ROOT / "mcp.json"),
                         help="path to an MCP config file")
+    # Used by /restart to reopen the same conversation.
+    parser.add_argument("--resume-session", default="", help=argparse.SUPPRESS)
     return parser
 
 
+def pick_model_at_startup() -> Path | None:
+    """No model was found: ask for a folder, then a model from it. None when the user gives up."""
+    print(f"[setup] no model found. Put a .gguf file in {modelpaths.MODELS_DIR}")
+    print("        or paste the folder that holds your models.")
+    while True:
+        try:
+            answer = input("Model folder (Enter to quit): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        if not answer:
+            return None
+        try:
+            folder = modelpaths.add_model_path(answer)
+        except ValueError as exc:
+            print(f"  {exc}")
+            continue
+        models = [m for m in modelpaths.list_local_models() if modelpaths.same_path(m.parent, folder)
+                  or modelpaths.same_path(m.parent.parent, folder)]
+        if not models:
+            print(f"  no .gguf files in {folder}")
+            continue
+        for index, model in enumerate(models, 1):
+            print(f"  {index:>2}. {model.name}")
+        try:
+            choice = input(f"Load which model [1-{len(models)}]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        if choice.isdigit() and 1 <= int(choice) <= len(models):
+            picked = models[int(choice) - 1]
+            modelpaths.remember_model(picked)
+            return picked
+        print(f"  {choice!r} is not on the list")
+
+
+# /restart asks for a relaunch here; main() does it once the session is shut down.
+RESTART: dict = {}
+
+
+def relaunch(argv: list, session_path: str) -> int:
+    args, skip = [], False
+    for item in argv:
+        if skip:
+            skip = False
+            continue
+        if item == "--resume-session":
+            skip = True
+            continue
+        if item.startswith("--resume-session="):
+            continue
+        args.append(item)
+    print("[restart] reopening the app...")
+    command = [sys.executable, str(Path(__file__).resolve()), *args, "--resume-session", session_path]
+    return subprocess.call(command)
+
+
 def main(argv=None):
+    code = _main(argv)
+    session = RESTART.pop("session", None)
+    if session:
+        return relaunch(list(argv) if argv is not None else sys.argv[1:], session)
+    return code
+
+
+def _main(argv=None):
     use_utf8_console()
+    for line in migrate_config.migrate():
+        print(f"[config] {line}")
     cfg = build_parser().parse_args(argv)
     if cfg.think == "none":
         cfg.think = "off"
@@ -2370,9 +2557,15 @@ def main(argv=None):
     root = Path(cfg.llama_dir)
     if not (root / "llama-cli.exe").exists() and not (root / "llama-server.exe").exists():
         print(f"[error] no llama.cpp build at {root}")
+        print(f"        put llama.cpp in {DEFAULT_ROOT / 'llama'}, or start with --llama-dir <folder>")
         return 2
+    if not Path(cfg.model).exists() and sys.stdin.isatty() and not cfg.task:
+        picked = pick_model_at_startup()
+        if picked is not None:
+            cfg.model = str(picked)
     if not Path(cfg.model).exists():
         print(f"[error] model not found: {cfg.model}")
+        print(f"        put a .gguf file in {modelpaths.MODELS_DIR}, or set \"model\" in {CONFIG_FILE}")
         return 2
 
     # The workspace comes from --workspace when it was given; otherwise from
@@ -2495,10 +2688,22 @@ def main(argv=None):
     )
     try:
         agent = OmniAgent(cfg, engine, ws, skills, tools, template, web=web, mcp=mcp)
-        settings_store.apply_saved(cfg, agent, settings_store.explicit_keys(argv_given))
+        agent.explicit_settings = settings_store.explicit_keys(argv_given)
+        settings_store.apply_saved(cfg, agent, agent.explicit_settings)
         ctx.agent = agent
+        if cfg.resume_session:
+            if agent.load_session(cfg.resume_session):
+                ctx.ws = agent.ws
+                restored = hasattr(agent.engine, "restore_slot") and agent.engine.restore_slot(agent.session_id)
+                print(f"[setup] resumed    : {Path(cfg.resume_session).name}"
+                      + (" (KV cache restored)" if restored else ""))
+            else:
+                print(f"[setup] could not resume {cfg.resume_session}")
         if interactive:
-            return repl(agent, ctx)
+            code = repl(agent, ctx)
+            if agent.restart_requested:
+                RESTART["session"] = agent.save_session()
+            return code
         agent.turn(task)
         agent.save_session()
         return 0
@@ -2508,11 +2713,18 @@ def main(argv=None):
                 mcp.close()
             except Exception:
                 pass
-        if cfg.engine == "server":
-            agent_ref = ctx.agent
-            if agent_ref is not None and len(agent_ref.messages) > 1 and hasattr(engine, "save_slot"):
-                engine.save_slot(agent_ref.session_id)
-            note = engine.stop()
+        # The engine in use may have been switched by /model or /start llama:
+        # stop every local server this session knows about.
+        agent_ref = ctx.agent
+        servers = []
+        for candidate in (engine, getattr(agent_ref, "engine", None), getattr(agent_ref, "local_engine", None)):
+            if getattr(candidate, "name", "") == "server" and all(candidate is not s for s in servers):
+                servers.append(candidate)
+        for server in servers:
+            if agent_ref is not None and len(agent_ref.messages) > 1 and hasattr(server, "save_slot") \
+                    and getattr(server, "running", False):
+                server.save_slot(agent_ref.session_id)
+            note = server.stop()
             if note:
                 print(f"[server] {note}")
             else:

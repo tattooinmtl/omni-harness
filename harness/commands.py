@@ -13,12 +13,14 @@ handful of extras that are useful for a local coding agent.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+import modelpaths
 import tui
 from version import VERSION, label as version_label
 
@@ -114,13 +116,58 @@ def _mcp_status(ctx: Context) -> dict:
 # --------------------------------------------------------------------------
 HELP_GROUPS = (
     ("Session", ("/help", "/clear", "/compact", "/autocompact", "/resume", "/history",
-                 "/status", "/transcript", "/exit")),
-    ("Model", ("/settings", "/set", "/model", "/reasoning", "/thinking", "/providers", "/cost")),
+                 "/status", "/transcript", "/reload", "/restart", "/exit")),
+    ("Models", ("/models", "/model", "/addmodelpath", "/start")),
+    ("Cloud providers (addon)", ("/addkey", "/provider", "/usemodel", "/uselocal")),
+    ("Model settings", ("/settings", "/set", "/reasoning", "/thinking", "/providers", "/cost")),
     ("Project", ("/project", "/diff", "/tools", "/skills", "/skill", "/mcp", "/web", "/browser")),
     ("Design", ("/design", "/design-review", "/resolve")),
     ("Setup and maintenance", ("/update", "/cuda", "/hardware", "/doctor", "/repair",
                                "/version", "/about")),
 )
+
+# How each command is typed, and one example. Shown by /help only.
+HELP_USAGE = {
+    "/help": ("/help", "/help"),
+    "/clear": ("/clear", "/clear"),
+    "/compact": ("/compact", "/compact"),
+    "/autocompact": ("/autocompact [on|off|percent]", "/autocompact 80"),
+    "/resume": ("/resume [# or id]", "/resume 1"),
+    "/history": ("/history", "/history"),
+    "/status": ("/status", "/status"),
+    "/transcript": ("/transcript", "/transcript"),
+    "/reload": ("/reload", "/reload"),
+    "/restart": ("/restart [llama]", "/restart llama"),
+    "/exit": ("/exit", "/exit"),
+    "/models": ("/models", "/models"),
+    "/model": ("/model [# or file name]", "/model 2"),
+    "/addmodelpath": ("/addmodelpath <folder>", "/addmodelpath D:\\AI\\models"),
+    "/start": ("/start llama", "/start llama"),
+    "/addkey": ("/addkey <provider> <key>", "/addkey nvidia nvapi-xxxxxxxx"),
+    "/provider": ("/provider [name]", "/provider nvidia"),
+    "/usemodel": ("/usemodel <provider> <#>", "/usemodel nvidia 3"),
+    "/uselocal": ("/uselocal", "/uselocal"),
+    "/settings": ("/settings", "/settings"),
+    "/set": ("/set <setting> <value>", "/set temp 0.7"),
+    "/reasoning": ("/reasoning [off|low|medium|xhigh|max]", "/reasoning low"),
+    "/thinking": ("/thinking", "/thinking"),
+    "/providers": ("/providers", "/providers"),
+    "/cost": ("/cost", "/cost"),
+    "/project": ("/project [folder]", "/project C:\\projects\\my-app"),
+    "/diff": ("/diff", "/diff"),
+    "/tools": ("/tools", "/tools"),
+    "/skills": ("/skills [id]", "/skills debug"),
+    "/skill": ("/skill <id>", "/skill verify"),
+    "/mcp": ("/mcp", "/mcp"),
+    "/web": ("/web", "/web"),
+    "/browser": ("/browser", "/browser"),
+    "/design": ("/design <idea>", "/design a plugin system for the tools"),
+    "/design-review": ("/design-review [file]", "/design-review design_draft.md"),
+    "/resolve": ("/resolve <numbers|all>", "/resolve 1,3"),
+    "/doctor": ("/doctor", "/doctor"),
+    "/version": ("/version", "/version"),
+    "/about": ("/about", "/about"),
+}
 
 
 class AgentTask:
@@ -156,11 +203,19 @@ def cmd_help(ctx: Context):
     theme = ctx.theme
     primaries = primary_commands()
 
+    width = 30
+
     def row(name: str, entry: dict) -> str:
+        usage, example = HELP_USAGE.get(name, (name, name))
+        # The usage column already shows how to type it.
+        summary = re.sub(r":\s*/\S.*$", "", entry["summary"])
         aliases = ""
         if entry["aliases"]:
             aliases = theme.paint(f"  ({', '.join(entry['aliases'])})", "dim")
-        return f"  {theme.paint(name.ljust(14), 'accent')}{entry['summary']}{aliases}"
+        head = f"  {theme.paint(usage.ljust(width), 'accent')}{summary}{aliases}"
+        if len(usage) >= width:
+            head = f"  {theme.paint(usage, 'accent')}\n  {' ' * width}{summary}{aliases}"
+        return f"{head}\n  {' ' * width}{theme.paint('e.g. ' + example, 'dim')}"
 
     out = []
     listed = set()
@@ -261,72 +316,141 @@ def cmd_providers(ctx: Context):
     return _lines(*out)
 
 
-def _model_candidates() -> list:
-    folder = Path(ctx_models_dir())
-    return sorted(folder.glob("*.gguf")) if folder.is_dir() else []
+def _limits(model: dict) -> str:
+    parts = []
+    if model.get("rpm"):
+        parts.append(f"{model['rpm']} RPM")
+    if model.get("tpm"):
+        tpm = model["tpm"]
+        parts.append(f"{tpm // 1000}K TPM" if tpm >= 1000 else f"{tpm} TPM")
+    if model.get("ctx"):
+        size = model["ctx"]
+        parts.append(f"{size // 1000}K ctx" if size >= 1000 else f"{size} ctx")
+    return "  ".join(parts)
 
 
-def ctx_models_dir() -> str:
-    model = os.environ.get("OMNI_MODEL_DIR")
-    if model:
-        return model
-    import json  # noqa: PLC0415
-    root = Path(__file__).resolve().parent.parent
+def model_catalog() -> list:
+    """Every model that can be loaded: local .gguf files, then cloud models when the addon is installed."""
+    entries = []
+    for path in modelpaths.list_local_models():
+        try:
+            detail = f"{path.stat().st_size / (1024 ** 3):.1f} GB"
+        except OSError:
+            detail = ""
+        entries.append({"provider": "local", "label": "local", "id": str(path), "name": path.name,
+                        "detail": f"{detail}  {path.parent}"})
     try:
-        configured = json.loads((root / "config.json").read_text(encoding="utf-8")).get("models_dir")
-    except (OSError, ValueError, AttributeError):
-        configured = None
-    return configured or str(root / "models")
+        from providers_addon.catalog import get_provider, provider_names, static_models  # noqa: PLC0415
+        from providers_addon.keystore import get_fetched_models, get_key  # noqa: PLC0415
+    except ImportError:
+        return entries
+    for name in provider_names():
+        if not get_key(name):
+            continue
+        label = get_provider(name)["label"]
+        for model in get_fetched_models(name) or static_models(name):
+            entries.append({"provider": name, "label": label, "id": model["id"], "name": model["id"],
+                            "detail": _limits(model)})
+    return entries
 
 
-@command("/model", "show the model, list the .gguf files, or switch with /model <name>")
+def _is_current(ctx: Context, entry: dict) -> bool:
+    engine = ctx.agent.engine
+    if entry["provider"] == "local":
+        return ctx.agent.using_local() and modelpaths.same_path(Path(entry["id"]), Path(ctx.cfg.model))
+    return (getattr(engine, "name", "") == "cloud" and getattr(engine, "provider_name", "") == entry["provider"]
+            and getattr(engine, "model", "") == entry["id"])
+
+
+def _current_model_text(ctx: Context) -> str:
+    engine = ctx.agent.engine
+    if getattr(engine, "name", "") == "cloud":
+        return f"{engine.provider_name} / {engine.model}"
+    return f"local / {ctx.cfg.model}"
+
+
+@command("/models", "list every model you can load, local and cloud, numbered")
+def cmd_models(ctx: Context):
+    theme = ctx.theme
+    entries = model_catalog()
+    ctx.agent.model_list = entries
+    out = [theme.paint("Models", "bold"), f"  in use: {_current_model_text(ctx)}", ""]
+    if not entries:
+        out.append(theme.paint(f"  no models found. Put a .gguf in {modelpaths.MODELS_DIR}", "warning"))
+        out.append(theme.paint("  or add a folder with /addmodelpath <folder>.", "dim"))
+        return _lines(*out)
+    out.append(theme.paint(f"  {'#':>3}  {'provider'.ljust(14)}{'model'.ljust(46)}details", "dim"))
+    for index, entry in enumerate(entries, 1):
+        mark = theme.paint("*", "success") if _is_current(ctx, entry) else " "
+        out.append(f" {mark}{theme.paint(str(index).rjust(3), 'accent')}  "
+                   f"{theme.paint(entry['label'][:13].ljust(14), 'muted')}"
+                   f"{entry['name'][:45].ljust(46)}{theme.paint(entry['detail'], 'dim')}")
+    out.append("")
+    out.append(theme.paint("Load one with /model <#>.", "dim"))
+    return _lines(*out)
+
+
+@command("/model", "show the model in use, or load one from the /models list: /model <#>")
 def cmd_model(ctx: Context):
     theme = ctx.theme
     argument = (ctx.agent.current_argument or "").strip()
-    current = Path(ctx.cfg.model)
-
     if not argument:
-        out = [theme.paint("Current model", "bold"), f"  {current}"]
-        candidates = _model_candidates()
-        if candidates:
-            out.append("")
-            out.append(theme.paint("Available", "bold"))
-            for candidate in candidates:
-                mark = theme.paint("*", "success") if candidate == current else " "
-                try:
-                    size = candidate.stat().st_size / (1024 ** 3)
-                    detail = f"{size:.1f} GB"
-                except OSError:
-                    detail = ""
-                out.append(f" {mark} {theme.paint(candidate.name.ljust(38), 'accent')}{detail}")
-            out.append("")
-            out.append(theme.paint("Switch with /model <file name>.", "dim"))
-        return _lines(*out)
+        return _lines(theme.paint("Model in use", "bold"), f"  {_current_model_text(ctx)}", "",
+                      theme.paint("See every model with /models, then load one with /model <#>.", "dim"))
 
-    candidates = _model_candidates()
+    entries = ctx.agent.model_list or model_catalog()
+    ctx.agent.model_list = entries
     target = None
-    for candidate in candidates:
-        if candidate.name.lower() == argument.lower():
-            target = candidate
-            break
-    if target is None:
-        candidate = Path(argument)
-        if candidate.is_file():
-            target = candidate
-    if target is None:
-        return theme.paint(f"no model file called {argument!r}", "warning")
-
-    if target == current:
-        return theme.paint(f"already using {target.name}", "dim")
-
-    ctx.cfg.model = str(target)
-    note = ctx.agent.invalidate_engine()
-    message = f"model set to {target.name}"
-    if note:
-        message += f"; {note}, it is reloaded with the new model on the next turn"
+    if argument.isdigit():
+        index = int(argument) - 1
+        if not 0 <= index < len(entries):
+            return theme.paint(f"no model #{argument}; run /models to see the list (1-{len(entries)})", "warning")
+        target = entries[index]
     else:
-        message += "; the engine reloads it on the next turn"
+        for entry in entries:
+            if entry["provider"] == "local" and Path(entry["id"]).name.lower() == argument.lower():
+                target = entry
+                break
+        if target is None and modelpaths.expand(argument).is_file():
+            path = modelpaths.expand(argument)
+            target = {"provider": "local", "id": str(path), "name": path.name}
+    if target is None:
+        return theme.paint(f"no model called {argument!r}; run /models and use its number", "warning")
+    if _is_current(ctx, target):
+        return theme.paint(f"already using {target['name']}", "dim")
+
+    if target["provider"] == "local":
+        print(theme.paint(f"loading {target['name']}...", "dim"))
+        message = ctx.agent.load_local_model(Path(target["id"]))
+    else:
+        message = ctx.agent.use_cloud(target["provider"], target["id"])
+    ctx.engine = ctx.agent.engine
     return theme.paint(message, "success")
+
+
+@command("/addmodelpath", "add a folder to search for .gguf models, or list the folders: /addmodelpath <folder>")
+def cmd_addmodelpath(ctx: Context):
+    theme = ctx.theme
+    argument = (ctx.agent.current_argument or "").strip()
+    if not argument:
+        out = [theme.paint("Model folders", "bold")]
+        models = modelpaths.list_local_models()
+        for folder in modelpaths.model_dirs():
+            count = sum(1 for m in models if modelpaths.same_path(m.parent, folder)
+                        or modelpaths.same_path(m.parent.parent, folder))
+            state = f"{count} model(s)" if folder.is_dir() else "missing"
+            out.append(f"  {str(folder).ljust(50)}{theme.paint(state, 'dim')}")
+        out.append("")
+        out.append(theme.paint("Add one with /addmodelpath <folder>.", "dim"))
+        return _lines(*out)
+    try:
+        folder = modelpaths.add_model_path(argument)
+    except ValueError as exc:
+        return theme.paint(str(exc), "warning")
+    ctx.agent.model_list = []
+    found = [m for m in modelpaths.list_local_models()
+             if modelpaths.same_path(m.parent, folder) or modelpaths.same_path(m.parent.parent, folder)]
+    return theme.paint(f"added {folder} ({len(found)} model(s) found). See them with /models.", "success")
 
 
 REASONING_LEVELS = {
@@ -493,6 +617,50 @@ def cmd_clear(ctx: Context):
     if sys.stdout.isatty():
         sys.stdout.write("\x1b[2J\x1b[H")
     return ctx.theme.paint("conversation cleared", "success")
+
+
+@command("/reload", "re-read config.json, model folders, skills and the project's AGENTS.md; keeps the chat")
+def cmd_reload(ctx: Context):
+    theme = ctx.theme
+    info = ctx.agent.reload()
+    ctx.skills = ctx.agent.skills
+    folders = ", ".join(str(f) for f in info["model_dirs"])
+    out = [theme.paint("reloaded", "success"),
+           f"  settings      config.json",
+           f"  skills        {info['skills']}",
+           f"  instructions  {'found' if info['instructions'] else 'none'}",
+           f"  model folders {folders}"]
+    if info["prompt_changed"]:
+        out.append(theme.paint("  the system prompt changed: the next turn reprocesses the whole prompt", "dim"))
+    return _lines(*out)
+
+
+@command("/restart", "restart the app and keep the conversation, or restart llama.cpp: /restart [llama]")
+def cmd_restart(ctx: Context):
+    theme = ctx.theme
+    argument = (ctx.agent.current_argument or "").strip().lower()
+    if argument in ("llama", "llama.cpp"):
+        print(theme.paint("restarting llama.cpp...", "dim"))
+        message = ctx.agent.start_local(restart=True)
+        ctx.engine = ctx.agent.engine
+        return theme.paint(message, "success")
+    if argument:
+        return theme.paint("use /restart (the app) or /restart llama", "warning")
+    ctx.agent.restart_requested = True
+    ctx.agent.quit_requested = True
+    return theme.paint("restarting; the conversation is reopened when the app is back", "muted")
+
+
+@command("/start", "start local llama.cpp (also switches back from a cloud model): /start llama")
+def cmd_start(ctx: Context):
+    theme = ctx.theme
+    argument = (ctx.agent.current_argument or "").strip().lower()
+    if argument not in ("llama", "llama.cpp"):
+        return theme.paint("use /start llama", "warning")
+    print(theme.paint("starting llama.cpp...", "dim"))
+    message = ctx.agent.start_local()
+    ctx.engine = ctx.agent.engine
+    return theme.paint(message, "success")
 
 
 @command("/compact", "summarise the conversation so far and start again with the summary")
