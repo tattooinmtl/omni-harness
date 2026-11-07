@@ -1,0 +1,85 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"           # e.g. v0.1.0, v1.2.3
+  workflow_dispatch:   # manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write      # needed to create releases and upload assets
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      # ------------------------------------------------------------------ #
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Inno Setup 6 is pre-installed on windows-latest runners.
+      # Path: C:\Program Files (x86)\Inno Setup 6\ISCC.exe
+      # ------------------------------------------------------------------ #
+      - name: Build installer with Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Error "Inno Setup not found at $iscc"
+            exit 1
+          }
+          & $iscc setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # ------------------------------------------------------------------ #
+      - name: Upload installer artifact (available from every workflow run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: omni-harness-setup
+          path: dist/omni-harness-setup.exe
+          retention-days: 30
+
+      # ------------------------------------------------------------------ #
+      # Create a GitHub Release only when triggered by a version tag
+      - name: Determine tag name
+        if: startsWith(github.ref, 'refs/tags/')
+        id: tag
+        shell: pwsh
+        run: echo "name=$($env:GITHUB_REF -replace 'refs/tags/','')" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: "Omni Harness ${{ steps.tag.outputs.name }}"
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.name, '-') }}
+          generate_release_notes: true
+          files: dist/omni-harness-setup.exe
+          body: |
+            ## Install
+
+            1. **Download** `omni-harness-setup.exe` below.
+            2. Run it. You will be asked whether to include the **BYOK cloud providers addon** (NVIDIA NIM + MiniMax — optional).
+            3. When installation completes, open any terminal and type:
+
+            ```
+            omni-harness
+            ```
+
+            ### Requirements
+
+            * Windows 10 / 11 (64-bit)
+            * [Python 3.10+](https://python.org/downloads/) — check **"Add Python to PATH"** during the Python installer
+            * A local [llama.cpp](https://github.com/ggerganov/llama.cpp) build **or** a cloud API key (NVIDIA / MiniMax) if you chose the providers addon
+
+            ### BYOK providers
+
+            After install, add an API key inside the app:
+
+            ```
+            /addkey nvidia  <your-nvidia-nim-key>
+            /addkey minimax <your-minimax-key>
+            ```
