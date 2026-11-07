@@ -26,8 +26,8 @@ jobs:
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
-            Write-Error "Inno Setup not found at $iscc"
-            exit 1
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           & $iscc setup.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

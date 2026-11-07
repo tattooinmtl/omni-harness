@@ -6,7 +6,6 @@
 #define MyAppVer     "0.1.0"
 #define MyAppPublish "tattooinmtl"
 #define MyAppURL     "https://github.com/tattooinmtl/omni-harness"
-#define MyInstDir    "{userdocs}\..\omni-harness"
 
 ; ---------------------------------------------------------------------------
 [Setup]
@@ -30,7 +29,6 @@ ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 DisableDirPage=no
 UninstallDisplayName={#MyAppName}
-UninstallDisplayIcon={app}\harness\omni_agent.py
 
 ; ---------------------------------------------------------------------------
 [Languages]
@@ -69,25 +67,6 @@ Name: "{group}\Run Omni Harness";    Filename: "{sys}\cmd.exe"; \
   Parameters: "/K ""omni-harness"""; WorkingDir: "{userhome}"; \
   Comment: "Open a terminal and start Omni Harness"
 Name: "{group}\Uninstall Omni Harness"; Filename: "{uninstallexe}"
-
-; ---------------------------------------------------------------------------
-; Post-install steps
-; ---------------------------------------------------------------------------
-[Run]
-; 1. pip install -e . so the omni-harness console script is registered
-Filename: "{code:GetPython}"; \
-  Parameters: "-m pip install --quiet -e ""{app}"""; \
-  WorkingDir: "{app}"; \
-  StatusMsg: "Installing omni-harness Python package..."; \
-  Flags: waitprogress
-
-; 2. Providers addon (only when component selected)
-Filename: "{code:GetPython}"; \
-  Parameters: """{app}\providers-addon\install-providers.py"" --harness ""{app}\harness"""; \
-  WorkingDir: "{app}\providers-addon"; \
-  StatusMsg: "Installing BYOK cloud providers addon..."; \
-  Flags: waitprogress; \
-  Components: providers
 
 ; ---------------------------------------------------------------------------
 [UninstallRun]
@@ -131,6 +110,10 @@ end;
 (* Called by {code:GetPython} in [Run] sections *)
 function GetPython(Param: String): String;
 begin
+  if PythonExe = '' then
+    PythonExe := FindPython;
+  if PythonExe = '' then
+    PythonExe := 'python';
   Result := PythonExe;
 end;
 
@@ -168,8 +151,8 @@ var
 begin
   if CurStep <> ssPostInstall then Exit;
 
-  // Run pip install -e in the install dir
-  PipArgs := '-m pip install --quiet -e "' + ExpandConstant('{app}') + '"';
+  WizardForm.StatusLabel.Caption := 'Installing omni-harness and its Python dependencies...';
+  PipArgs := '-m pip install --upgrade -e "' + ExpandConstant('{app}') + '"';
   if not Exec(PythonExe, PipArgs, ExpandConstant('{app}'), SW_SHOW,
               ewWaitUntilTerminated, RC) or (RC <> 0) then begin
     MsgBox(
@@ -180,8 +163,13 @@ begin
       mbError, MB_OK);
   end;
 
+  WizardForm.StatusLabel.Caption := 'Downloading the Chromium browser used by the browser tools...';
+  Exec(PythonExe, '-m playwright install chromium', ExpandConstant('{app}'),
+       SW_SHOW, ewWaitUntilTerminated, RC);
+
   // Providers addon
   if WizardIsComponentSelected('providers') then begin
+    WizardForm.StatusLabel.Caption := 'Installing BYOK cloud providers addon...';
     AddonArgs := '"' + ExpandConstant('{app}') + '\providers-addon\install-providers.py"' +
                  ' --harness "' + ExpandConstant('{app}') + '\harness"';
     Exec(PythonExe, AddonArgs, ExpandConstant('{app}\providers-addon'),
