@@ -29,15 +29,20 @@ jobs:
             choco install innosetup --no-progress -y
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          # providers first: setup.iss embeds dist\omni-harness-providers-setup.exe
+          & $iscc providers-setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $iscc setup.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # ------------------------------------------------------------------ #
-      - name: Upload installer artifact (available from every workflow run)
+      - name: Upload installer artifacts (available from every workflow run)
         uses: actions/upload-artifact@v4
         with:
-          name: omni-harness-setup
-          path: dist/omni-harness-setup.exe
+          name: omni-harness-installers
+          path: |
+            dist/omni-harness-setup.exe
+            dist/omni-harness-providers-setup.exe
           retention-days: 30
 
       # ------------------------------------------------------------------ #
@@ -57,13 +62,15 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.tag.outputs.name, '-') }}
           generate_release_notes: true
-          files: dist/omni-harness-setup.exe
+          files: |
+            dist/omni-harness-setup.exe
+            dist/omni-harness-providers-setup.exe
           body: |
             ## Install
 
-            1. **Download** `omni-harness-setup.exe` below.
-            2. Run it. You will be asked whether to include the **BYOK cloud providers addon** (NVIDIA NIM + MiniMax — optional).
-            3. When installation completes, open any terminal and type:
+            1. **Download and run `omni-harness-setup.exe`**. It installs the app to `%USERPROFILE%\.omni-harness` with all Python dependencies. Tick **"Also install the BYOK cloud providers addon"** to install both in one go.
+            2. **Or add the addon later** with `omni-harness-providers-setup.exe` (NVIDIA NIM + MiniMax). It has its own entry in Windows *Apps*, so it can be removed on its own.
+            3. Open any terminal and type:
 
             ```
             omni-harness
