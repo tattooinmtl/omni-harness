@@ -66,6 +66,8 @@ jobs:
             dist/omni-harness-setup.exe
             dist/omni-harness-providers-setup.exe
           body: |
+            > **Notice:** the app's core changed on 2026-11-07 during an AI-assisted session in which the model switched partway through (Claude Sonnet 4.6 → Claude Opus 5.5). Read [CHANGELOG.md](https://github.com/tattooinmtl/omni-harness/blob/main/CHANGELOG.md) for every behavior change.
+
             ## Install
 
             1. **Download and run `omni-harness-setup.exe`**. It installs the app to `%USERPROFILE%\.omni-harness` with all Python dependencies. Tick **"Also install the BYOK cloud providers addon"** to install both in one go.

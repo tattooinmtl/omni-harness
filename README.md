@@ -1,5 +1,9 @@
 # Omni harness: a terminal agent for Arete-27B
 
+> **Notice (2026-11-07):** the app's core changed during an AI-assisted session in which the model
+> switched partway through (Claude Sonnet 4.6 → Claude Opus 5.5). See [CHANGELOG.md](CHANGELOG.md)
+> for every behavior change before you update.
+
 A local terminal agent that runs **NousResearch Arete-27B** (GGUF, e.g. Q4_K_M) on llama.cpp,
 with the parts that depend on the model built for Arete.
 
