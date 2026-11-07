@@ -12,7 +12,7 @@ Usage:
     bridge = McpBridge()
     bridge.connect_all()
     tools = bridge.list_tools()
-    text = bridge.call_tool("mcp_global_brain_brain_status", {})
+    text = bridge.call_tool("mcp_my_server_status", {})
     bridge.close()
 """
 from __future__ import annotations
@@ -49,9 +49,7 @@ for _http_name in ("streamable_http_client", "streamablehttp_client"):
 
 # --- configuration -----------------------------------------------------------
 CONFIG_CANDIDATES: tuple[Path, ...] = (
-    Path(r"C:\Users\ThePa\.minimax\mcp.json"),
-    Path(r"C:\Users\ThePa\.mavis\mcp.json"),
-    Path(r"C:\Users\ThePa\.omni-harness\mcp.json"),
+    Path(__file__).resolve().parent.parent / "mcp.json",
 )
 
 DEFAULT_CONNECT_TIMEOUT = 20.0
@@ -95,7 +93,7 @@ def _sanitize_text(text: str, spec: dict | None = None) -> str:
 
 
 def _server_prefix(server_name: str) -> str:
-    """`global-brain` -> `mcp_global_brain_`."""
+    """`my-server` -> `mcp_my_server_`."""
     return "mcp_" + re.sub(r"[^A-Za-z0-9_]", "_", server_name) + "_"
 
 

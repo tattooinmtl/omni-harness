@@ -74,7 +74,7 @@ def shadow_text(text: str) -> str:
     return "\n".join(row.rstrip() for row in rows)
 
 
-# The same layout as Spark Code: the name on top, the version under it.
+# Banner layout: the name on top, the version under it.
 ANSI_SHADOW = {
     "a": shadow_text("OMNI-HARNESS"),
     "b": shadow_text(version_label()),

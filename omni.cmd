@@ -9,14 +9,13 @@ rem    omni                               interactive session in the last projec
 rem    omni --workspace C:\work           work in another folder
 rem    omni --task "run the tests"        one task, then exit
 rem    omni --think low                   thinking on (off is the default)
-rem    omni --llama-dir C:\Llama-master\llama.cpp\latest_bin\bin\Release
-rem                                       use your b12189 source build
+rem    omni --llama-dir <folder>          use a llama.cpp build in another folder
 rem    omni --mcp                         also load the MCP servers in mcp.json
 rem    omni selftest                      checks that need no model
 rem
-rem  Model     : OMNI_MODEL     (default C:\models\NousResearch_Arete-27B-Q4_K_M.gguf)
-rem  llama.cpp : OMNI_LLAMA_DIR (default C:\models\llama.cpp, b11873 Clang)
-rem  Server    : http://127.0.0.1:8083  (spark26 keeps 8081/8082)
+rem  Model     : OMNI_MODEL     (default models\ next to this file)
+rem  llama.cpp : OMNI_LLAMA_DIR (default llama\ next to this file)
+rem  Server    : http://127.0.0.1:8083
 rem ===========================================================================
 
 set "ROOT=%~dp0"
