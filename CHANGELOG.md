@@ -19,8 +19,13 @@
   nothing.
 - **Providers addon.** `/addkey`, `/usemodel` and `/uselocal` now switch the model immediately; no
   restart needed. The addon no longer patches `/help`, which lists its commands itself.
-- **Known issue:** `/design-review` and `/resolve` don't work. They need a `review` module that was
-  never part of the repo.
+- **`/design-review` and `/resolve` work.** Both had been broken since V.0.1.0 because their
+  `review` module was never in the repo; it's added now (`harness/review.py`). Checks that need no
+  model look for missing sections and for file paths that aren't in the workspace. Then two model
+  reviewers (feasibility, risks), who see only the document and the project's file list, never the
+  conversation, report numbered findings. `/resolve 1,3` or `/resolve all` has the agent fix them.
+  On local llama.cpp the conversation's cache is saved before the review and restored after, also
+  when Esc stops it.
 
 ## Notice: core changes on 2026-11-07
 
